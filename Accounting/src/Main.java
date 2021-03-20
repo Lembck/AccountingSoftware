@@ -14,7 +14,7 @@ class Date {
   }
 }
 
-class ArrayListAccountUtils {
+class ALAUtils {
   double sum(ArrayList<AnAccount> accounts) {
     double tempAmount = 0.0;
     for (AnAccount acc : accounts) {
@@ -34,6 +34,35 @@ class ArrayListAccountUtils {
   public String getString(String string, double amount) {
     return string + new String(new char[60-string.length()-Double.toString(amount).length()]).replace("\0", "-") + amount;
   }
+
+  public ArrayList<AnAccount> updateAccount(ArrayList<AnAccount> assets, String title, double amount) {
+    for (AnAccount a : assets) {
+      if (a.title == title) {
+        a.amount += amount;
+      }
+    }
+    return assets;
+  }
+
+  public AnAccount getAccount(ArrayList<AnAccount> accounts, String title) {
+    for (AnAccount a : accounts) {
+      if (a.title == title) {
+        return a;
+      }
+    }
+    throw new NullPointerException();
+  }
+
+  public void transact(Transaction transaction) {
+    transaction.account.transact(transaction.amount);
+  }
+
+  public void transact(ArrayList<Transaction> transactions) {
+    for (Transaction t : transactions) {
+      this.transact(t);
+    }
+    
+  }
 }
 
 interface IAccount {
@@ -49,6 +78,10 @@ abstract class AnAccount {
     this.title = title;
     this.amount = amount;
     this.isDebit = isDebit;
+  }
+
+  void transact(double amount) {
+    this.amount += amount;
   }
 
   abstract String getString(String prefix);
@@ -97,7 +130,7 @@ class Account extends AnAccount {
   }
 
   String getString(String prefix) {
-    return new ArrayListAccountUtils().getString(prefix + this.title, this.amount);
+    return new ALAUtils().getString(prefix + this.title, this.amount);
   }
 }
 
@@ -135,7 +168,7 @@ class SummaryAccount extends AnAccount {
   }
 
   void checkAmount() {
-    this.amount = new ArrayListAccountUtils().sum(this.subAccounts);
+    this.amount = new ALAUtils().sum(this.subAccounts);
   }
 
   void addSubAccount(Account acc) {
@@ -144,9 +177,9 @@ class SummaryAccount extends AnAccount {
   }
 
   String getString(String prefix) {
-    String temp = new ArrayListAccountUtils().getString(prefix + this.title, this.amount);
+    String temp = new ALAUtils().getString(prefix + this.title, this.amount);
     for (AnAccount a : this.subAccounts) {
-      temp += "\n" + new ArrayListAccountUtils().getString(a, prefix + "  ");
+      temp += "\n" + new ALAUtils().getString(a, prefix + "  ");
     }
     return temp;
   }
@@ -154,11 +187,11 @@ class SummaryAccount extends AnAccount {
 }
 
 class Transaction {
-  Account account;
+  AnAccount account;
   double amount;
   boolean isDebit;
 
-  Transaction(Account account, double amount, boolean isDebit) {
+  Transaction(AnAccount account, double amount, boolean isDebit) {
     this.account = account;
     this.amount = amount;
     this.isDebit = isDebit;
@@ -177,7 +210,11 @@ class JournalEntry {
   }
 }
 
-class BalanceSheet {
+interface Sheet {
+  void updateAccount(String title, double amount);
+}
+
+class BalanceSheet implements Sheet {
   ArrayList<AnAccount> assets;
   ArrayList<AnAccount> liabilities;
   ArrayList<AnAccount> stockholdersEquity;
@@ -230,38 +267,50 @@ class BalanceSheet {
     System.out.println("Assets:");
 
     for (AnAccount acc : assets) {
-      System.out.println(new ArrayListAccountUtils().getString(acc, "  "));
+      System.out.println(new ALAUtils().getString(acc, "  "));
     }
 
-    System.out.println(new ArrayListAccountUtils().getString("Total Assets", new ArrayListAccountUtils().sum(assets)));
+    System.out.println(new ALAUtils().getString("Total Assets", new ALAUtils().sum(assets)));
 
     System.out.println("Liabilities:");
 
     for (AnAccount acc : liabilities) {
-      System.out.println(new ArrayListAccountUtils().getString(acc, "  "));
+      System.out.println(new ALAUtils().getString(acc, "  "));
     }
-    double liabilitiesCost = new ArrayListAccountUtils().sum(liabilities);
-    System.out.println(new ArrayListAccountUtils().getString("Total Liabilities", liabilitiesCost));
+    double liabilitiesCost = new ALAUtils().sum(liabilities);
+    System.out.println(new ALAUtils().getString("Total Liabilities", liabilitiesCost));
 
     System.out.println("Stockholder's Equity:");
 
     for (AnAccount acc : stockholdersEquity) {
-      System.out.println(new ArrayListAccountUtils().getString(acc, "  "));
+      System.out.println(new ALAUtils().getString(acc, "  "));
     }
 
-    System.out.println(new ArrayListAccountUtils().getString("Total Stockholder's Equity", new ArrayListAccountUtils().sum(stockholdersEquity)));
+    System.out.println(new ALAUtils().getString("Total Stockholder's Equity", new ALAUtils().sum(stockholdersEquity)));
 
-    System.out.println(new ArrayListAccountUtils().getString("Total Liabilities and Stockholder's Equity", new ArrayListAccountUtils().sum(stockholdersEquity)));
+    System.out.println(new ALAUtils().getString("Total Liabilities and Stockholder's Equity", new ALAUtils().sum(stockholdersEquity)));
+  }
+  
+  boolean balances() {
+    return new ALAUtils().sum(assets) == new ALAUtils().sum(liabilities) + new ALAUtils().sum(stockholdersEquity);
+  }
+
+  public void updateAccount(String title, double amount) {
+    if (assets.containsTitle(title)) {
+      new ALAUtils().getAccount(assets, title).amount += amount;
+    }
   }
 }
 
-class IncomeStatement {
+class IncomeStatement implements Sheet {
   ArrayList<AnAccount> revenues;
   ArrayList<AnAccount> expenses;
+  double netIncome;
 
   IncomeStatement(ArrayList<AnAccount> revenues, ArrayList<AnAccount> expenses) {
     this.revenues = revenues;
     this.expenses = expenses;
+    this.calculateNetIncome();
   }
 
   IncomeStatement() {
@@ -271,6 +320,11 @@ class IncomeStatement {
         new Account("Cost of Goods Sold", false),
         new SummaryAccount("Selling, General, and Administrative Expenses", false, new ArrayList<AnAccount>()),
         new Account("Income Tax Expense")));
+    this.calculateNetIncome();
+  }
+  
+  void calculateNetIncome() {
+    this.netIncome = new ALAUtils().sum(revenues) - new ALAUtils().sum(expenses);
   }
 }
 
@@ -291,8 +345,19 @@ class Examples {
   Examples() {}
 
   void testCompany(Tester t) {
-    Company x = new Company("Tesla");
-    x.balanceSheet.print();
+    Company comp = new Company("Tesla");
+    comp.balanceSheet.print();
+    t.checkExpect(comp.balanceSheet.balances(), true);
+    
+    AnAccount cashAccount = new ALAUtils().getAccount(comp.balanceSheet.assets, "Cash");
+    Transaction cashTra = new Transaction(cashAccount, 100, true);
+    
+    AnAccount AccPay = new ALAUtils().getAccount(comp.balanceSheet.liabilities, "Accounts Payable");
+    Transaction AccPayTra = new Transaction(AccPay, 100, true);
+    new ALAUtils().transact(new ArrayList<Transaction>(List.of(cashTra, AccPayTra)));
+    
+    comp.balanceSheet.print();
+    t.checkExpect(comp.balanceSheet.balances(), true);
   }
 }
 
