@@ -62,7 +62,7 @@ class ALAUtils {
     for (Transaction t : transactions) {
       this.transact(t);
     }
-    
+
   }
 
   public boolean containsTitle(ArrayList<AnAccount> accounts, String title) {
@@ -75,7 +75,7 @@ class ALAUtils {
   }
 
   public void updateAccount(AnAccount acc, double amount) {
-    
+
   }
 }
 
@@ -205,11 +205,11 @@ class HiddenAccount extends AnAccount {
   HiddenAccount(String title, double amount, boolean isDebit) {
     super(title, amount, isDebit);
   }
-  
+
   HiddenAccount(String title, boolean isDebit) {
     super(title, isDebit);
   }
-  
+
   HiddenAccount(String title) {
     super(title);
   }
@@ -217,7 +217,7 @@ class HiddenAccount extends AnAccount {
   String getString(String prefix) {
     return "";
   }
-  
+
 }
 
 class Transaction {
@@ -272,10 +272,10 @@ class BalanceSheet implements Sheet {
         new Account("Prepaid Expenses"), 
         new Account("Long-Term Investments"),
         new SummaryAccount("Property, Plant, and Equipment", 
-          new ArrayList<AnAccount>(List.of(
-            new Account("Equipment"),
-            new Account("Buildings"),
-            new Account("Land")))),
+            new ArrayList<AnAccount>(List.of(
+                new Account("Equipment"),
+                new Account("Buildings"),
+                new Account("Land")))),
         new Account("Intangibles")));
     this.liabilities = new ArrayList<AnAccount>(List.of(
         new Account("Accounts Payable", false),
@@ -321,7 +321,7 @@ class BalanceSheet implements Sheet {
     System.out.println(new ALAUtils().getString("Total Liabilities and Stockholder's Equity", 
         new ALAUtils().sum(liabilities) + new ALAUtils().sum(stockholdersEquity)));
   }
-  
+
   boolean balances() {
     return new ALAUtils().sum(assets) == new ALAUtils().sum(liabilities)
         + new ALAUtils().sum(stockholdersEquity);
@@ -349,12 +349,16 @@ class BalanceSheet implements Sheet {
     }
     return null;
   }
+
+  public void updateRetainedEarnings(double amount) {
+    this.updateAccount("Retained Earnings", amount);
+  }
 }
 
 class IncomeStatement implements Sheet {
   ArrayList<AnAccount> revenues;
   ArrayList<AnAccount> expenses;
-  double netIncome;
+  Account netIncome;
 
   IncomeStatement(ArrayList<AnAccount> revenues, ArrayList<AnAccount> expenses) {
     this.revenues = revenues;
@@ -377,11 +381,13 @@ class IncomeStatement implements Sheet {
                 new Account("Insurance Expense", false),
                 new Account("Repair Expense", false)))),
         new Account("Income Tax Expense")));
+    this.netIncome = new Account("Net Income", false);
     this.calculateNetIncome();
   }
-  
-  void calculateNetIncome() {
-    this.netIncome = new ALAUtils().sum(revenues) - new ALAUtils().sum(expenses);
+
+  public double calculateNetIncome() {
+    this.netIncome.amount = new ALAUtils().sum(revenues) - new ALAUtils().sum(expenses);
+    return this.netIncome.amount;
   }
 
   public void updateAccount(String title, double amount) {
@@ -404,7 +410,7 @@ class IncomeStatement implements Sheet {
     }
     return null;
   }
-  
+
   void print() {
     System.out.println("Revenues:");
 
@@ -432,25 +438,82 @@ class IncomeStatement implements Sheet {
   }
 }
 
+class StatementOfSE implements Sheet {
+  HiddenAccount begCommonStock;
+  HiddenAccount stockIssuance;
+  Account endCommonStock;
+
+  HiddenAccount begRetainedEarnings;
+  HiddenAccount netIncome;
+  HiddenAccount dividendsDeclared;
+  Account endRetainedEarnings;
+
+  StatementOfSE(double begCommonStockAmount, double begRetainedEarningsAmount, double netIncomeAmount) {
+    this.begCommonStock = new HiddenAccount("Beg. Common Stock", begCommonStockAmount, false);
+    this.begRetainedEarnings = new HiddenAccount("Beg. Retained Earnings", begRetainedEarningsAmount, false);
+
+    this.stockIssuance = new HiddenAccount("Stock Issuance", false);
+    this.netIncome = new HiddenAccount("Net Income", netIncomeAmount, false);
+    this.dividendsDeclared = new HiddenAccount("Dividends Declared", false);
+
+    this.endCommonStock = new Account("Ending Common Stock", false);
+    this.endRetainedEarnings = new Account("Ending Retained Earnings", false);
+
+    this.updateCommonStock();
+    this.updateRetainedEarnings();
+  }
+
+  public void updateAccount(String title, double amount) {
+    // TODO Auto-generated method stub
+  }
+
+  @Override
+  public AnAccount getAccount(String title) {
+    // TODO Auto-generated method stub
+    return this.endCommonStock;
+  }
+
+  public void updateNetIncome(double netIncomeAmount) {
+    this.netIncome.amount = netIncomeAmount;
+  }
+
+  public void updateCommonStock() {
+    this.endCommonStock.amount = this.begCommonStock.amount + this.stockIssuance.amount;
+  }
+
+  public double updateRetainedEarnings() {
+    this.endRetainedEarnings.amount = this.begRetainedEarnings.amount + this.netIncome.amount
+        - this.dividendsDeclared.amount;
+    return this.endRetainedEarnings.amount;
+  }
+
+  public void print() {
+    System.out.println(new ALAUtils().getString(this.endCommonStock, ""));
+    System.out.println(new ALAUtils().getString(this.endRetainedEarnings, ""));
+  }
+
+}
 
 class Company {
   String companyName;
   String units;
   Hashtable<Date, BalanceSheet> balanceSheets;
   Hashtable<Date, IncomeStatement> incomeStatements;
+  Hashtable<Date, StatementOfSE> statementsOfSE;
 
   Company(String companyName) {
     this.units = "millions of";
     this.companyName = companyName;
     this.balanceSheets = new Hashtable<Date, BalanceSheet>();
     this.incomeStatements = new Hashtable<Date, IncomeStatement>();
+    this.statementsOfSE = new Hashtable<Date, StatementOfSE>();
   }
 
   public AnAccount getAccount(String title, Date date) {
     ArrayList<Sheet> potentialSheets = new ArrayList<Sheet>(
         List.of(this.balanceSheets.get(date),
             this.incomeStatements.get(date)));  
-    
+
     for (Sheet s : potentialSheets) {
       if (s != null) {
         return s.getAccount(title);
@@ -458,10 +521,10 @@ class Company {
     }
     return null;
   }
-  
+
   public void printBalanceSheet(Date date) {
     String header = this.companyName + "\n" + "Balance Sheet" + "\n" + "At " 
-    + date.month + "/" + date.day + "/" + date.year + "\n" + "(in " + this.units + " dollars)";
+        + date.month + "/" + date.day + "/" + date.year + "\n" + "(in " + this.units + " dollars)";
     System.out.println(header);
     this.balanceSheets.get(date).print();
   }
@@ -469,7 +532,7 @@ class Company {
   public void addBalanceSheet(Date date) {
     this.balanceSheets.put(date, new BalanceSheet());
   }
-  
+
   public void addBalanceSheet(Date date, BalanceSheet bs) {
     this.balanceSheets.put(date, bs);
   }
@@ -477,45 +540,84 @@ class Company {
   public void addIncomeStatement(Date date) {
     this.incomeStatements.put(date, new IncomeStatement());
   }
-  
+
   public void addIncomeStatement(Date date, IncomeStatement is) {
     this.incomeStatements.put(date, new IncomeStatement());
   }
 
-  public void printIncomement(Date date) {
+  public void printIncomeStatement(Date date) {
     String header = this.companyName + "\n" + "Income Statement" + "\n" + "For the Year Ended " 
         + date.month + "/" + date.day + "/" + date.year + "\n" + "(in " + this.units + " dollars)";
-        System.out.println(header);
-        this.incomeStatements.get(date).print();
+    System.out.println(header);
+    this.incomeStatements.get(date).print();
   }
 
+  public void updateNetIncome(Date date) {
+    double netIncome = this.incomeStatements.get(date).calculateNetIncome();
+    this.statementsOfSE.get(date).updateNetIncome(netIncome);
+  }
+
+  public void updateRetainedEarnings(Date date) {
+    double retainedEarnings = this.statementsOfSE.get(date).updateRetainedEarnings();
+    this.balanceSheets.get(date).updateRetainedEarnings(retainedEarnings);
+  }
+
+  public void printStatementOfSE(Date date) {
+    String header = this.companyName + "\n" + "Statement of Stockholder's Equity" + "\n" + "For the Year Ended " 
+        + date.month + "/" + date.day + "/" + date.year + "\n" + "(in " + this.units + " dollars)";
+    System.out.println(header);
+    this.statementsOfSE.get(date).print();
+
+  }
+
+  public void addStatementOfSE(Date date) {
+    this.statementsOfSE.put(date, new StatementOfSE(10, 10, 10));
+  }
+
+  public void addStatementOfSE(Date date, StatementOfSE se) {
+    this.statementsOfSE.put(date, se);
+    
+  }
+
+  public void printSheets(Date date) {
+    this.updateNetIncome(date);
+    this.updateRetainedEarnings(date);
+    
+    this.printBalanceSheet(date);
+    this.printIncomeStatement(date);
+    this.printStatementOfSE(date);
+  }
 }
 
 class Examples {
   Examples() {}
+  
+  Date currentDate;
+  Company comp;
 
-  void testCompany(Tester t) {
+  void makeCompany() {
     Date currentDate = new Date(2020, 12, 31);
     Company comp = new Company("Tesla");
     comp.addBalanceSheet(currentDate);
     comp.addIncomeStatement(currentDate);
-    //comp.printBalanceSheet(currentDate);
-    t.checkExpect(comp.balanceSheets.get(currentDate).balances(), true);
+    comp.addStatementOfSE(currentDate);
+  }
+  
+  void testCompany(Tester t) {
+    this.makeCompany();
     
-    //AnAccount commonStock = comp.getAccount("Common stock", currentDate);
-    comp.balanceSheets.get(currentDate);
+    comp.printSheets(currentDate);
+  }
+  
+  void testTransactions(Tester t) {
+    this.makeCompany();
     
     AnAccount cashAccount = new ALAUtils().getAccount(comp.balanceSheets.get(currentDate).assets, "Cash");
     Transaction cashTra = new Transaction(cashAccount, 100, true);
-    
+
     AnAccount AccPay = new ALAUtils().getAccount(comp.balanceSheets.get(currentDate).liabilities, "Accounts Payable");
     Transaction AccPayTra = new Transaction(AccPay, 100, true);
     new ALAUtils().transact(new ArrayList<Transaction>(List.of(cashTra, AccPayTra)));
-    
-    comp.printBalanceSheet(currentDate);
-    t.checkExpect(comp.balanceSheets.get(currentDate).balances(), true);
-    
-    comp.printIncomement(currentDate);
   }
 }
 
