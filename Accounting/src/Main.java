@@ -373,6 +373,14 @@ class HeaderAccount extends SummaryAccount {
     return temp;
     
   }
+  
+  public void calculateAmount(ArrayList<AnAccount> accounts) {
+    double tempAmount = 0;
+    for (AnAccount acc : this.subAccounts) {
+      tempAmount += acc.amount;
+    }
+    this.amount = tempAmount;
+  }
 
 }
 
@@ -456,7 +464,7 @@ class BalanceSheet implements Sheet {
                 new Account("Wages Payable", false), 
                 new Account("Utilities Payable", false),
                 new SumAccount("Total Current Liabilities", new ArrayList<String>(List.of("Accounts Payable", "Unearned Revenue", 
-                    "Accrued Expenses", "Income Tax Payable", "Wages Payable", "Utilities Payable")), false))))))),
+                    "Dividends Payable", "Income Tax Payable", "Wages Payable", "Utilities Payable")), false))))))),
         new SummaryAccount("Notes Payable", false, new ArrayList<AnAccount>(List.of(
             new Account("Short-term Notes Payable", false), 
             new Account("Long-term Notes Payable", false)))),
@@ -532,39 +540,46 @@ class BalanceSheet implements Sheet {
 class IncomeStatement implements Sheet {
   ArrayList<AnAccount> revenues;
   ArrayList<AnAccount> expenses;
-  Account netIncome;
 
   IncomeStatement(ArrayList<AnAccount> revenues, ArrayList<AnAccount> expenses) {
     this.revenues = revenues;
     this.expenses = expenses;
-    this.calculateNetIncome();
   }
 
   IncomeStatement() {
     this.revenues = new ArrayList<AnAccount>(List.of(
-        new Account("Sales Revenue"),
-        new Account("Fee Revenue"),
-        new Account("Interest Revenue"),
-        new Account("Rent Revenue")));
+        new Account("Sales Revenue")));
+        //new Account("Interest Revenue"),
+        //new Account("Rent Revenue")));
     this.expenses = new ArrayList<AnAccount>(List.of(
         new Account("Cost of Goods Sold", false),
-        new SummaryAccount("Selling, General, and Administrative Expenses", false, 
+        new HeaderAccount("Operating Expenses", new ArrayList<AnAccount>(List.of(
+            new Account("Supplies Expense", false),
+            new Account("Wages Expense", false),
+            new Account("Rent Expense", false),
+            new Account("Insurance Expense", false),
+            new Account("Utilities Expense", false),
+            new Account("Repairs Expense", false),
+            new Account("Other Operating Expenses", false)))),
+        new HeaderAccount("General and Administrative Expenses", false, 
             new ArrayList<AnAccount>(List.of(
-                new Account("Wages Expense", false),
-                new Account("Rent Expense", false),
-                new Account("Depreciation Expense", false),
-                new Account("Insurance Expense", false),
-                new Account("Repair Expense", false)))),
-        new Account("Income Tax Expense")));
-    this.netIncome = new Account("Net Income", false);
-    this.calculateNetIncome();
+                new Account("Training Expense", false),
+                new Account("Advertising Expense", false)))),
+        new Account("Depreciation Expense", false),
+        new Account("Loss on Disposal of Assets", false),
+        new SumAccount("Total Operating Expenses", new ArrayList<String>(List.of(
+            "Cost of Goods Sold", "Operating Expenses", "General and Administrative Expenses",
+            "Depreciation Expense", "Loss on Disposal of Assets")), false),
+        new SumAccount("Income from Operations", new ArrayList<String>(List.of("Sales Revenue", "Total Operating Expenses")), true),
+        new HeaderAccount("Other items:", false, new ArrayList<AnAccount>(List.of(
+            new Account("Interest Revenue", true),
+            new Account("Interest Expense", false)))),
+        new SumAccount("Income Before Income Taxes", new ArrayList<String>(List.of(
+            "Income from Operations", "Interest Revenue", "Interest Expense")), true),
+        new Account("Income Tax Expense", false),
+        new SumAccount("Net Income", new ArrayList<String>(List.of("Income Before Income Taxes", "Income Tax Expense")), true)));
   }
-
-  public double calculateNetIncome() {
-    this.netIncome.amount = new ALAUtils().sum(revenues) - new ALAUtils().sum(expenses);
-    return this.netIncome.amount;
-  }
-
+  
   public void updateAccount(String title, double amount) {
     if (new ALAUtils().containsTitle(this.revenues, title)) {
       AnAccount acc = new ALAUtils().getAccount(this.revenues, title);
@@ -587,29 +602,28 @@ class IncomeStatement implements Sheet {
   }
 
   void print() {
-    System.out.println("Revenues:");
+    String message = "";
+    message += "REVENUES" + "\n";
 
     for (AnAccount acc : this.revenues) {
-      System.out.println(new ALAUtils().getString(acc, "  "));
+      message += new ALAUtils().getString(acc, "  ") + "\n";
     }
 
-    System.out.println(new ALAUtils().getString("Operating Revenues", new ALAUtils().sum(this.revenues)));
-
-    System.out.println("Expenses:");
+    message += "EXPENSES" + "\n";
 
     for (AnAccount acc : this.expenses) {
       if (acc.title == "Income Tax Expense") {
         String temp = new ALAUtils().getString("Income before income taxes", 
             new ALAUtils().sum(this.revenues) - (new ALAUtils().sum(this.expenses) - acc.amount));
-        System.out.print(temp + "\n");
+        message += temp + "\n";
       }
-      System.out.println(new ALAUtils().getString(acc, "  "));
+      message += new ALAUtils().getString(acc, "  ") + "\n";
     }
-    double liabilitiesCost = new ALAUtils().sum(this.expenses);
-    System.out.println(new ALAUtils().getString("Total Liabilities", liabilitiesCost));
 
-    System.out.println(new ALAUtils().getString("Net Income", 
-        new ALAUtils().sum(revenues) - new ALAUtils().sum(expenses)));
+    message += new ALAUtils().getString("Net Income", 
+        new ALAUtils().sum(revenues) - new ALAUtils().sum(expenses)) + "\n";
+    
+    System.out.println(message);
   }
 }
 
@@ -727,11 +741,6 @@ class Company {
     this.incomeStatements.get(date).print();
   }
 
-  public void updateNetIncome(Date date) {
-    double netIncome = this.incomeStatements.get(date).calculateNetIncome();
-    this.statementsOfSE.get(date).updateNetIncome(netIncome);
-  }
-
   public void updateRetainedEarnings(Date date) {
     double retainedEarnings = this.statementsOfSE.get(date).updateRetainedEarnings();
     this.balanceSheets.get(date).updateRetainedEarnings(retainedEarnings);
@@ -755,8 +764,8 @@ class Company {
   }
 
   public void printSheets(Date date) {
-    this.updateNetIncome(date);
     this.updateRetainedEarnings(date);
+    this.generateSumAccounts(date);
 
     this.printBalanceSheet(date);
     this.printIncomeStatement(date);
@@ -785,6 +794,10 @@ class Examples {
     this.comp.addBalanceSheet(this.currentDate);
     this.comp.addIncomeStatement(this.currentDate);
     this.comp.addStatementOfSE(this.currentDate);
+  }
+  
+  void printCurrentRatio() {
+    System.out.println(this.comp.getCurrentRatio(currentDate));
   }
 
   void testTransactions(Tester t) {
@@ -845,9 +858,22 @@ class Examples {
       System.out.println("Balance Sheet does not balance!!");
     }
 
+    this.printCurrentRatio();
+  }
+  
+  void testChapterThree(Tester t) {
+    this.makeCompany();
+    // Chapter 3 Transactions
     
+    // 1)
+    AnAccount cashAccount = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).assets, "Cash");
+    AnAccount supplies = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).assets, "Supplies");
+    new ALAUtils().transact(new ArrayList<Transaction>(List.of(new Transaction(supplies, 200), new Transaction(cashAccount, -200))));
+    AnAccount suppliesExp = new ALAUtils().getAccount(this.comp.incomeStatements.get(this.currentDate).expenses, "Supplies Expense");
+    new ALAUtils().transact(new ArrayList<Transaction>(List.of(new Transaction(suppliesExp, 100), new Transaction(supplies, -100))));
     
-    //System.out.println(this.comp.getCurrentRatio(currentDate));
+    this.comp.printBalanceSheet(currentDate);
+    this.comp.printIncomeStatement(currentDate);
   }
 }
 
