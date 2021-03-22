@@ -65,6 +65,10 @@ class ALAUtils {
     }
     return null;
   }
+  
+  public double getValue(ArrayList<AnAccount> accounts, String title) {
+    return this.getAccount(accounts, title).amount;
+  }
 
   public void transact(Transaction transaction) {
     transaction.account.transact(transaction.amount);
@@ -382,6 +386,12 @@ class Transaction {
     this.amount = amount;
     this.isDebit = isDebit;
   }
+  
+  Transaction(AnAccount account, double amount) {
+    this.account = account;
+    this.amount = amount;
+    this.isDebit = true;
+  }
 }
 
 class JournalEntry {
@@ -415,12 +425,12 @@ class BalanceSheet implements Sheet {
     this.assets = new ArrayList<AnAccount>(List.of(
         new HeaderAccount("Current Assets", new ArrayList<AnAccount>(List.of(
             new Account("Cash"), 
-            new Account("Short-term investments"), 
+            new Account("Short-term Investments"), 
             new SummaryAccount("Accounts Receivable"),
             new Account("Supplies"),
             new Account("Prepaid Expenses"),
             new SumAccount("Total Current Assets", new ArrayList<String>(List.of("Cash",
-                "Short-term investments", "Accounts Receivable", "Supplies", "Prepaid Expenses")), true)))),
+                "Short-term Investments", "Accounts Receivable", "Supplies", "Prepaid Expenses")), true)))),
         new HeaderAccount("Property, Plant, and Equipment", 
             new ArrayList<AnAccount>(List.of(
                 new Account("Equipment"),
@@ -440,7 +450,7 @@ class BalanceSheet implements Sheet {
         new HeaderAccount("Current Liabilities", new ArrayList<AnAccount>(List.of(
             new Account("Accounts Payable", false),
             new Account("Unearned Revenue", false),
-            new Account("Accrued Expenses", false),
+            new Account("Dividends Payable", false),
             new Account("Income Tax Payable", false),
             new SummaryAccount("Accrued Expenses Payable", false, new ArrayList<AnAccount>(List.of(
                 new Account("Wages Payable", false), 
@@ -472,35 +482,17 @@ class BalanceSheet implements Sheet {
       toBePrinted += new ALAUtils().getString(acc, "  ") + "\n";
     }
 
-    toBePrinted += new ALAUtils().getString("Total Assets", new ALAUtils().sum(assets)) + "\n";
-
     toBePrinted += "LIABILITIES AND STOCKHOLDER'S EQUITY" + "\n";
 
     for (AnAccount acc : this.LnSE) {
       toBePrinted += new ALAUtils().getString(acc, "  ") + "\n";
     }
 
-
-    /*double liabilitiesCost = new ALAUtils().sum(this.LnSE);
-    toBePrinted += new ALAUtils().getString("Total Liabilities", liabilitiesCost) + "\n";
-
-    toBePrinted += "Stockholder's Equity:";
-
-    for (AnAccount acc : stockholdersEquity) {
-      System.out.println(new ALAUtils().getString(acc, "  "));
-    }
-
-    System.out.println(new ALAUtils().getString("Total Stockholder's Equity", 
-        new ALAUtils().sum(stockholdersEquity)));
-
-    System.out.println(new ALAUtils().getString("Total Liabilities and Stockholder's Equity", 
-        new ALAUtils().sum(liabilities) + new ALAUtils().sum(stockholdersEquity)));*/
-
     System.out.println(toBePrinted);
   }
 
   boolean balances() {
-    return new ALAUtils().sum(this.assets) == new ALAUtils().sum(this.LnSE);
+    return new ALAUtils().getValue(this.assets, "Total Assets") == new ALAUtils().getValue(this.LnSE, "Total Liabilities and Stockholder's Equity");
   }
 
   public void updateAccount(String title, double amount) {
@@ -557,7 +549,8 @@ class IncomeStatement implements Sheet {
     this.expenses = new ArrayList<AnAccount>(List.of(
         new Account("Cost of Goods Sold", false),
         new SummaryAccount("Selling, General, and Administrative Expenses", false, 
-            new ArrayList<AnAccount>(List.of(new Account("Wages Expense", false),
+            new ArrayList<AnAccount>(List.of(
+                new Account("Wages Expense", false),
                 new Account("Rent Expense", false),
                 new Account("Depreciation Expense", false),
                 new Account("Insurance Expense", false),
@@ -771,8 +764,8 @@ class Company {
   }
 
   public double getCurrentRatio(Date date) {
-    return new ALAUtils().sum(
-        new ALAUtils().getAccount(this.balanceSheets.get(date).assets, "Current Assets")); 
+    return new ALAUtils().getValue(this.balanceSheets.get(date).assets, "Total Current Assets") / 
+        new ALAUtils().getValue(this.balanceSheets.get(date).LnSE, "Total Current Liabilities"); 
   }
 
   public void generateSumAccounts(Date date) {
@@ -796,25 +789,65 @@ class Examples {
 
   void testTransactions(Tester t) {
     this.makeCompany();
-
+    
+    //Chapter 2 transactions
+    
+    //a)
     AnAccount cashAccount = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).assets, "Cash");
-    Transaction cashTra = new Transaction(cashAccount, 100, true);
+    Transaction cashTra1 = new Transaction(cashAccount, 300);
 
-    AnAccount AccPay = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).LnSE, "Accounts Payable");
-    Transaction AccPayTra = new Transaction(AccPay, 100, true);
-    new ALAUtils().transact(new ArrayList<Transaction>(List.of(cashTra, AccPayTra)));
+    AnAccount ComSto = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).LnSE, "Common Stock");
+    Transaction ComStoTra1 = new Transaction(ComSto, 1);
+    
+    AnAccount APIC = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).LnSE, "Additional Paid-in Capital");
+    Transaction APICTra1 = new Transaction(APIC, 299);
+    
+    new ALAUtils().transact(new ArrayList<Transaction>(List.of(cashTra1, ComStoTra1, APICTra1)));
+    
+    //b)
+    Transaction cashTra2 = new Transaction(cashAccount, 2);
+    
+    AnAccount NotPay = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).LnSE, "Notes Payable");
+    Transaction NotPayTra = new Transaction(NotPay, 2);
+    
+    new ALAUtils().transact(new ArrayList<Transaction>(List.of(cashTra2, NotPayTra)));
+    
+    //c)
+    AnAccount equipment = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).assets, "Equipment");
+    AnAccount intangibles = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).assets, "Intangibles");
+    
+    Transaction cashTra3 = new Transaction(cashAccount, -54);
+    Transaction equipmentTra1 = new Transaction(equipment, 52);
+    Transaction intangiblesTra1 = new Transaction(intangibles, 3);
+    Transaction notPayTra1 = new Transaction(NotPay, 1);
+    
+    new ALAUtils().transact(new ArrayList<Transaction>(List.of(cashTra3, equipmentTra1, intangiblesTra1, notPayTra1)));
 
+    //d)
+    new ALAUtils().transact(new ArrayList<Transaction>(List.of(new Transaction(cashAccount, -1), new Transaction(NotPay, -1))));
+    
+    //e)
+    AnAccount investments = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).assets, "Short-term Investments");
+    new ALAUtils().transact(new ArrayList<Transaction>(List.of(new Transaction(cashAccount, -44), new Transaction(investments, 44))));
+    
+    //f)
+    AnAccount divPayable = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).LnSE, "Dividends Payable");
+    AnAccount retainedEarn = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).LnSE, "Retained Earnings");
+    new ALAUtils().transact(new ArrayList<Transaction>(List.of(new Transaction(divPayable, 2), new Transaction(retainedEarn, -2))));
+    
     this.comp.generateSumAccounts(currentDate);
-
-
-    // AnAccount TCA = new ALAUtils().getAccount(this.comp.balanceSheets.get(this.currentDate).assets, "Total Current Assets");
-
-
-    for (AnAccount acc : this.comp.balanceSheets.get(this.currentDate).assets) {
-      //acc.calculateAmount(this.comp.balanceSheets.get(this.currentDate).assets);
+    
+    this.comp.printBalanceSheet(currentDate);
+    
+    if(this.comp.balanceSheets.get(currentDate).balances()) {
+      System.out.println("Balance Sheet Balances!!");
+    } else {
+      System.out.println("Balance Sheet does not balance!!");
     }
 
-    this.comp.printBalanceSheet(currentDate);
+    
+    
+    //System.out.println(this.comp.getCurrentRatio(currentDate));
   }
 }
 
